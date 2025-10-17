@@ -9,21 +9,11 @@ class SocketClient {
   connect(token: string) {
     this.token = token;
     
-    // Disconnect existing socket if any
-    if (this.socket) {
-      this.socket.disconnect();
-    }
-    
     this.socket = io(SOCKET_URL, {
       auth: {
         token: token,
       },
       transports: ['websocket', 'polling'],
-      forceNew: true,
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 20000
     });
 
     this.socket.on('connect', () => {
@@ -53,11 +43,8 @@ class SocketClient {
   }
 
   joinRoom(roomCode: string) {
-    if (this.socket && this.socket.connected) {
-      console.log('Joining room:', roomCode);
+    if (this.socket) {
       this.socket.emit('join-room', roomCode);
-    } else {
-      console.error('Socket not connected, cannot join room');
     }
   }
 
@@ -71,11 +58,8 @@ class SocketClient {
   }
 
   sendChatMessage(message: { text: string }) {
-    if (this.socket && this.socket.connected) {
-      console.log('Sending chat message:', message);
+    if (this.socket) {
       this.socket.emit('chat-message', message);
-    } else {
-      console.error('Socket not connected, cannot send chat message');
     }
   }
 
@@ -112,6 +96,43 @@ class SocketClient {
   onVoiceToggle(callback: (data: any) => void) {
     if (this.socket) {
       this.socket.on('voice-toggle', callback);
+    }
+  }
+
+  // WebRTC Voice Chat Methods
+  sendWebRTCOffer(offer: RTCSessionDescriptionInit) {
+    if (this.socket) {
+      this.socket.emit('webrtc-offer', { offer });
+    }
+  }
+
+  sendWebRTCAnswer(answer: RTCSessionDescriptionInit) {
+    if (this.socket) {
+      this.socket.emit('webrtc-answer', { answer });
+    }
+  }
+
+  sendWebRTCIceCandidate(candidate: RTCIceCandidateInit) {
+    if (this.socket) {
+      this.socket.emit('webrtc-ice-candidate', { candidate });
+    }
+  }
+
+  onWebRTCOffer(callback: (data: { userId: string; offer: RTCSessionDescriptionInit }) => void) {
+    if (this.socket) {
+      this.socket.on('webrtc-offer', callback);
+    }
+  }
+
+  onWebRTCAnswer(callback: (data: { userId: string; answer: RTCSessionDescriptionInit }) => void) {
+    if (this.socket) {
+      this.socket.on('webrtc-answer', callback);
+    }
+  }
+
+  onWebRTCIceCandidate(callback: (data: { userId: string; candidate: RTCIceCandidateInit }) => void) {
+    if (this.socket) {
+      this.socket.on('webrtc-ice-candidate', callback);
     }
   }
 

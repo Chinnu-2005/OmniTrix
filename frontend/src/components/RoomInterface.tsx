@@ -79,13 +79,15 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
     };
     
     const handleChatMessage = (message: any) => {
-      console.log('Received chat message:', message);
+      console.log('💬 Received chat message:', message);
       setMessages(prev => {
         // Prevent duplicate messages by checking if message already exists
         const exists = prev.some(msg => msg._id === message._id);
         if (exists) {
+          console.log('⚠️ Duplicate message detected, ignoring');
           return prev;
         }
+        console.log('✅ Adding new message to state');
         return [...prev, message];
       });
     };

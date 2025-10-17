@@ -8,9 +8,11 @@ const app=require('./app');
 const server = createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.CORS_ORIGIN,
-        credentials: true
-    }
+        origin: true,
+        credentials: true,
+        methods: ['GET', 'POST']
+    },
+    transports: ['websocket', 'polling']
 });
 
 handleConnection(io);

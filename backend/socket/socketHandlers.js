@@ -32,19 +32,18 @@ const handleConnection = (io) => {
     io.on('connection', (socket) => {
         console.log(`User ${socket.user.username} connected`);
 
+        // --- Room Join ---
         socket.on('join-room', async (roomCode) => {
             console.log(`User ${socket.user.username} attempting to join room: ${roomCode}`);
             
             try {
                 const room = await Room.findOne({ roomId: roomCode });
                 if (!room) {
-                    console.log(`Room ${roomCode} not found`);
                     socket.emit('error', 'Room not found');
                     return;
                 }
                 
                 if (!room.participants.includes(socket.userId)) {
-                    console.log(`User ${socket.userId} not in participants list for room ${roomCode}`);
                     socket.emit('error', 'Access denied');
                     return;
                 }
@@ -52,31 +51,29 @@ const handleConnection = (io) => {
                 socket.join(roomCode);
                 socket.roomCode = roomCode;
                 
-                console.log(`User ${socket.user.username} successfully joined room: ${roomCode}`);
-                
                 socket.to(roomCode).emit('user-joined', {
                     userId: socket.userId,
                     username: socket.user.username,
                     avatar: socket.user.avatar
                 });
+
+                console.log(`✅ ${socket.user.username} joined room ${roomCode}`);
             } catch (error) {
                 console.error('Error joining room:', error);
                 socket.emit('error', 'Failed to join room');
             }
         });
 
+        // --- Drawing Updates ---
         socket.on('drawing-update', async (data) => {
             if (!socket.roomCode) return;
 
             try {
-                // Broadcast drawing data to other users in the room
                 socket.to(socket.roomCode).emit('drawing-update', {
                     ...data,
-                    userId: socket.userId,
-                    username: socket.user.username
+                    userId: socket.userId
                 });
 
-                // Save to database for persistence (except cursor movements)
                 if (data.type === 'clear') {
                     const room = await Room.findOne({ roomId: socket.roomCode });
                     if (room) {
@@ -92,11 +89,22 @@ const handleConnection = (io) => {
             }
         });
 
+        // --- Chat Message ---
         socket.on('chat-message', async (message) => {
-            if (!socket.roomCode) return;
+            console.log(`💬 Chat message from ${socket.user.username}:`, message);
+            
+            if (!socket.roomCode) {
+                console.log('❌ No room code found');
+                return;
+            }
 
             try {
                 const room = await Room.findOne({ roomId: socket.roomCode });
+                if (!room) {
+                    console.log(`❌ Room not found: ${socket.roomCode}`);
+                    socket.emit('error', 'Room not found');
+                    return;
+                }
                 
                 const chatMessage = await Chat.create({
                     roomId: room._id,
@@ -107,13 +115,19 @@ const handleConnection = (io) => {
                 const populatedMessage = await Chat.findById(chatMessage._id)
                     .populate('sender', 'username avatar');
 
-                // Send to all users in the room (including sender for immediate feedback)
+                console.log(`📤 Broadcasting to room ${socket.roomCode}:`, populatedMessage.message);
+                
+                // Broadcast to ALL users in the room
                 io.to(socket.roomCode).emit('chat-message', populatedMessage);
+                
+                console.log(`✅ Message sent successfully`);
             } catch (error) {
+                console.error('❌ Error sending message:', error);
                 socket.emit('error', 'Failed to send message');
             }
         });
 
+        // --- Voice Toggle (UI-level, not live audio) ---
         socket.on('voice-toggle', (data) => {
             if (!socket.roomCode) return;
             
@@ -124,6 +138,34 @@ const handleConnection = (io) => {
             });
         });
 
+        // --- WebRTC Voice Chat Signaling ---
+        socket.on("webrtc-offer", (data) => {
+            if (!socket.roomCode) return;
+            console.log(`WebRTC Offer from ${socket.user.username} in room ${socket.roomCode}`);
+            socket.to(socket.roomCode).emit("webrtc-offer", {
+                userId: socket.userId,
+                offer: data.offer,
+            });
+        });
+
+        socket.on("webrtc-answer", (data) => {
+            if (!socket.roomCode) return;
+            console.log(`WebRTC Answer from ${socket.user.username} in room ${socket.roomCode}`);
+            socket.to(socket.roomCode).emit("webrtc-answer", {
+                userId: socket.userId,
+                answer: data.answer,
+            });
+        });
+
+        socket.on("webrtc-ice-candidate", (data) => {
+            if (!socket.roomCode) return;
+            socket.to(socket.roomCode).emit("webrtc-ice-candidate", {
+                userId: socket.userId,
+                candidate: data.candidate,
+            });
+        });
+
+        // --- Disconnect ---
         socket.on('disconnect', () => {
             if (socket.roomCode) {
                 socket.to(socket.roomCode).emit('user-left', {
