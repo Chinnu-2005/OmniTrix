@@ -50,11 +50,14 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
       }
     };
 
-    socketClient.onDrawingUpdate(handleDrawingUpdate);
+    // Set up socket listener
+    const socket = socketClient.getSocket();
+    if (socket) {
+      socket.on('drawing-update', handleDrawingUpdate);
+    }
 
     return () => {
       // Cleanup socket listeners
-      const socket = socketClient.getSocket();
       if (socket) {
         socket.off('drawing-update', handleDrawingUpdate);
       }
