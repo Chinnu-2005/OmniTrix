@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Zap, LogOut, Moon, Sun, Users, Copy, Check, ArrowLeft } from 'lucide-react';
-import { supabase, Room, Profile } from '../lib/supabase';
+import { apiClient, Room, User } from '../lib/api';
+import { socketClient } from '../lib/socket';
+import { Whiteboard } from './Whiteboard';
 
 type RoomInterfaceProps = {
   roomId: string;
@@ -10,91 +12,75 @@ type RoomInterfaceProps = {
 };
 
 export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
-  const { profile, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [room, setRoom] = useState<Room | null>(null);
-  const [participants, setParticipants] = useState<Profile[]>([]);
+  const [participants, setParticipants] = useState<User[]>([]);
   const [copied, setCopied] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
 
   useEffect(() => {
     loadRoomData();
-    loadParticipants();
-
-    const participantsChannel = supabase
-      .channel(`room_${roomId}_participants`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'room_participants',
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => {
-          loadParticipants();
-        }
-      )
-      .subscribe();
+    loadMessages();
+    
+    // Join the room via socket
+    socketClient.joinRoom(roomId);
+    
+    // Set up socket listeners
+    socketClient.onUserJoined((data) => {
+      console.log('User joined:', data);
+      loadRoomData(); // Reload room data to get updated participants
+    });
+    
+    socketClient.onUserLeft((data) => {
+      console.log('User left:', data);
+      loadRoomData(); // Reload room data to get updated participants
+    });
+    
+    socketClient.onChatMessage((message) => {
+      setMessages(prev => [...prev, message]);
+    });
 
     return () => {
-      participantsChannel.unsubscribe();
+      // Clean up socket listeners when component unmounts
     };
   }, [roomId]);
 
   const loadRoomData = async () => {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('id', roomId)
-      .single();
-
-    if (error) {
+    try {
+      const response = await apiClient.getUserRooms();
+      if (response.success) {
+        const foundRoom = response.data.find(r => r.roomId === roomId);
+        if (foundRoom) {
+          setRoom(foundRoom);
+          setParticipants(foundRoom.participants || []);
+        }
+      }
+    } catch (error) {
       console.error('Error loading room:', error);
-      return;
     }
-    setRoom(data);
   };
 
-  const loadParticipants = async () => {
-    const { data, error } = await supabase
-      .from('room_participants')
-      .select('user_id')
-      .eq('room_id', roomId);
-
-    if (error) {
-      console.error('Error loading participants:', error);
-      return;
+  const loadMessages = async () => {
+    try {
+      const response = await apiClient.getRoomMessages(roomId);
+      if (response.success) {
+        setMessages(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error);
     }
-
-    const userIds = data.map((p) => p.user_id);
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('id', userIds);
-
-    if (profilesError) {
-      console.error('Error loading profiles:', error);
-      return;
-    }
-
-    setParticipants(profiles || []);
   };
 
   const handleCopyCode = () => {
-    if (room?.room_code) {
-      navigator.clipboard.writeText(room.room_code);
+    if (room?.roomId) {
+      navigator.clipboard.writeText(room.roomId);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
   const handleLeaveRoom = async () => {
-    await supabase
-      .from('room_participants')
-      .delete()
-      .eq('room_id', roomId)
-      .eq('user_id', profile?.id);
-
     onLeave();
   };
 
@@ -115,10 +101,10 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
                 <span className="text-xl font-bold text-gray-900 dark:text-white">
                   {room?.name || 'Loading...'}
                 </span>
-                {room?.room_code && (
+                {room?.roomId && (
                   <div className="flex items-center space-x-2">
                     <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                      {room.room_code}
+                      {room.roomId}
                     </span>
                     <button
                       onClick={handleCopyCode}
@@ -179,11 +165,11 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                     {participant.username}
-                    {participant.id === profile?.id && (
+                    {participant._id === user?._id && (
                       <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">(You)</span>
                     )}
                   </p>
-                  {participant.id === room?.owner_id && (
+                  {participant._id === room?.createdBy?._id && (
                     <p className="text-xs text-blue-600 dark:text-cyan-400">Owner</p>
                   )}
                 </div>
@@ -192,20 +178,8 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
           </div>
         </aside>
 
-        <main className="flex-1 p-8">
-          <div className="h-full bg-gray-50 dark:bg-gray-800 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center transition-colors duration-300">
-            <div className="text-center">
-              <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-blue-700 dark:from-cyan-500 dark:to-cyan-700 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Zap className="w-12 h-12 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                Canvas Placeholder
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 max-w-md">
-                This is where the collaborative whiteboard will appear. Start brainstorming with your team at lightning speed!
-              </p>
-            </div>
-          </div>
+        <main className="flex-1 flex">
+          <Whiteboard roomId={roomId} />
         </main>
       </div>
     </div>

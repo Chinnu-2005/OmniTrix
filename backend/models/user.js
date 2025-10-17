@@ -1,5 +1,5 @@
-const monogoose=require('mongoose')
-const {Schema}=monogoose;
+const mongoose=require('mongoose')
+const {Schema}=mongoose;
 const jwt=require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 
@@ -69,4 +69,4 @@ userSchema.methods.generateRefreshToken=async function(){
     )
 }
 
-module.exports=monogoose.model('User',userSchema);
+module.exports=mongoose.model('User',userSchema);

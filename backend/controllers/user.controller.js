@@ -52,7 +52,7 @@ const login = async (req, res) => {
 
         const options = {
             httpOnly: true,
-            secure: true
+            secure: process.env.NODE_ENV === 'production'
         };
 
         res.status(200)
@@ -64,4 +64,26 @@ const login = async (req, res) => {
     }
 };
 
-module.exports = { signup, login };
+const logout = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        
+        await User.findByIdAndUpdate(userId, {
+            $unset: { refreshToken: 1 }
+        });
+
+        const options = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production'
+        };
+
+        res.status(200)
+            .clearCookie("accessToken", options)
+            .clearCookie("refreshToken", options)
+            .json(new ApiResponse(200, "User logged out successfully", {}));
+    } catch (error) {
+        res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+    }
+};
+
+module.exports = { signup, login, logout };

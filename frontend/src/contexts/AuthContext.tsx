@@ -1,10 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase, Profile } from '../lib/supabase';
+import { apiClient, User } from '../lib/api';
+import { socketClient } from '../lib/socket';
 
 type AuthContextType = {
   user: User | null;
-  profile: Profile | null;
   loading: boolean;
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -15,89 +14,52 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadProfile(session.user.id);
-      } else {
-        setLoading(false);
+    const token = localStorage.getItem('accessToken');
+    const userData = localStorage.getItem('userData');
+    
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        apiClient.setToken(token);
+        socketClient.connect(token);
+      } catch (error) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('userData');
       }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      (async () => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await loadProfile(session.user.id);
-        } else {
-          setProfile(null);
-        }
-      })();
-    });
-
-    return () => subscription.unsubscribe();
+    }
+    
+    setLoading(false);
   }, []);
 
-  const loadProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) throw error;
-      setProfile(data);
-    } catch (error) {
-      console.error('Error loading profile:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const signUp = async (email: string, password: string, username: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error) throw error;
-
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([
-          {
-            id: data.user.id,
-            username,
-            email,
-          },
-        ]);
-
-      if (profileError) throw profileError;
-    }
+    await apiClient.signup(username, email, password);
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) throw error;
+    const response = await apiClient.login(email, password);
+    
+    const { user: userData, accessToken } = response.data;
+    setUser(userData);
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('userData', JSON.stringify(userData));
+    apiClient.setToken(accessToken);
+    socketClient.connect(accessToken);
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    setUser(null);
+    apiClient.clearToken();
+    socketClient.disconnect();
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('userData');
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,22 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Home, Clock, Star, Search, Bell, Gift, LogOut } from 'lucide-react';
+import { apiClient, Room } from '../lib/api';
+import { JoinRoomModal } from './JoinRoomModal';
+import { Home, Clock, Star, Search, Bell, Gift, LogOut, Plus, Users } from 'lucide-react';
 
-interface Room {
-  id: string;
-  name: string;
-  lastModified: string;
-  owner: string;
-  thumbnail: string;
+interface DashboardProps {
+  onRoomJoin: (roomId: string) => void;
 }
 
-export const Dashboard = () => {
+export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
   const { user, signOut } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedView, setSelectedView] = useState<'home' | 'recent' | 'starred'>('home');
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showJoinModal, setShowJoinModal] = useState(false);
 
-  // Sample past rooms data (with thumbnail images)
-  const [rooms] = useState<Room[]>([
+  useEffect(() => {
+    loadUserRooms();
+  }, []);
+
+  const loadUserRooms = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getUserRooms();
+      if (response.success) {
+        setRooms(response.data);
+      }
+    } catch (err) {
+      setError('Failed to load rooms');
+      console.error('Error loading rooms:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sample past rooms data (with thumbnail images) - fallback
+  const sampleRooms = [
     {
       id: '1',
       name: 'My First Canvas',
@@ -38,14 +59,23 @@ export const Dashboard = () => {
       owner: 'You',
       thumbnail: 'data:image/png;base64,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',
     },
-  ]);
+  ];
 
-  const handleCreateRoom = () => {
-    console.log('Create new room');
+  const handleCreateRoom = async () => {
+    try {
+      const roomName = `${user?.username}'s Room ${new Date().toLocaleDateString()}`;
+      const response = await apiClient.createRoom(roomName);
+      if (response.success) {
+        onRoomJoin(response.data.roomId);
+      }
+    } catch (err) {
+      setError('Failed to create room');
+      console.error('Error creating room:', err);
+    }
   };
 
   const handleOpenRoom = (roomId: string) => {
-    console.log('Open room:', roomId);
+    onRoomJoin(roomId);
   };
 
   return (
@@ -55,14 +85,14 @@ export const Dashboard = () => {
         {/* User Profile Section */}
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
-              { 'U'}
+            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-bold text-lg shadow-md cursor-pointer" title="View Profile">
+              {user?.username?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="flex-1">
               <h2 className="font-bold text-gray-800 text-[18px]">
-                {'User'}
+                {user?.username || 'User'}
               </h2>
-              <p className="text-[14px] text-gray-500">Free Account</p>
+              <p className="text-[14px] text-gray-500">{user?.email || 'Free Account'}</p>
             </div>
             <button
               onClick={signOut}
@@ -148,8 +178,8 @@ export const Dashboard = () => {
               <Bell className="w-5 h-5 text-gray-600" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </button>
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer">
-              {'U'}
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer" title="View Profile">
+              {user?.username?.charAt(0).toUpperCase() || 'U'}
             </div>
           </div>
         </header>
@@ -202,12 +232,22 @@ export const Dashboard = () => {
             <section>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">Past Rooms</h2>
-                <button
-                  onClick={handleCreateRoom}
-                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg font-semibold text-[16px] shadow-md hover:shadow-lg hover:scale-105 transition-all"
-                >
-                  Create Room
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowJoinModal(true)}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-semibold text-[16px] shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                  >
+                    <Users className="w-4 h-4" />
+                    Join Room
+                  </button>
+                  <button
+                    onClick={handleCreateRoom}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg font-semibold text-[16px] shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create Room
+                  </button>
+                </div>
               </div>
 
               {/* Rooms Table */}
@@ -221,21 +261,23 @@ export const Dashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {rooms.map((room) => (
+                      {(rooms.length > 0 ? rooms : sampleRooms).map((room) => (
                       <tr
-                        key={room.id}
+                        key={room._id || room.id}
                         className="border-b border-gray-100 hover:bg-orange-50 transition-colors cursor-pointer"
-                        onClick={() => handleOpenRoom(room.id)}
+                        onClick={() => handleOpenRoom(room.roomId || room.id)}
                       >
                         <td className="px-6 py-4 flex items-center gap-4">
-                          <img src={room.thumbnail} alt={room.name} className="w-12 h-12 rounded-lg object-cover" />
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold">
+                            {room.name.charAt(0).toUpperCase()}
+                          </div>
                           <div>
                             <p className="font-semibold text-gray-800 text-[16px]">{room.name}</p>
-                            <p className="text-sm text-gray-500">Modified {room.lastModified}</p>
+                            <p className="text-sm text-gray-500">Modified {new Date(room.updatedAt || room.lastModified).toLocaleDateString()}</p>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-gray-600 text-[15px]">{room.lastModified}</td>
-                        <td className="px-6 py-4 text-gray-600 text-[15px]">{room.owner}</td>
+                        <td className="px-6 py-4 text-gray-600 text-[15px]">{new Date(room.updatedAt || room.lastModified).toLocaleDateString()}</td>
+                        <td className="px-6 py-4 text-gray-600 text-[15px]">{room.createdBy?.username || room.owner || 'You'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -245,6 +287,12 @@ export const Dashboard = () => {
           </div>
         </div>
       </main>
+      
+      <JoinRoomModal
+        isOpen={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
+        onRoomJoined={onRoomJoin}
+      />
     </div>
   );
 };
