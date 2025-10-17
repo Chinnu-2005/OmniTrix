@@ -8,7 +8,7 @@ interface WhiteboardProps {
 }
 
 interface DrawingData {
-  type: 'draw' | 'clear' | 'shape';
+  type: 'draw' | 'clear' | 'shape' | 'cursor';
   x?: number;
   y?: number;
   prevX?: number;
@@ -18,6 +18,8 @@ interface DrawingData {
   color?: string;
   strokeWidth?: number;
   tool?: string;
+  userId?: string;
+  username?: string;
 }
 
 export const Whiteboard = ({ roomId }: WhiteboardProps) => {
@@ -29,6 +31,7 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
   const [lastPoint, setLastPoint] = useState<{x: number, y: number} | null>(null);
   const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [remoteCursors, setRemoteCursors] = useState<{[userId: string]: {x: number, y: number, username: string}}>({});
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -57,13 +60,17 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
 
     // Listen for drawing updates from other users
     const handleDrawingUpdate = (data: DrawingData) => {
-      console.log('Received drawing update:', data);
       if (data.type === 'draw' && data.x !== undefined && data.y !== undefined) {
         drawOnCanvas(data.x, data.y, data.prevX, data.prevY, data.color || '#000000', data.strokeWidth || 2, data.tool || 'pen');
       } else if (data.type === 'shape' && data.x !== undefined && data.y !== undefined) {
         drawShape(data.x, data.y, data.width || 0, data.height || 0, data.color || '#000000', data.strokeWidth || 2, data.tool || 'rectangle');
       } else if (data.type === 'clear') {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+      } else if (data.type === 'cursor' && data.userId && data.x !== undefined && data.y !== undefined) {
+        setRemoteCursors(prev => ({
+          ...prev,
+          [data.userId!]: { x: data.x!, y: data.y!, username: data.username || 'User' }
+        }));
       }
     };
 
@@ -134,8 +141,6 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-
     const canvas = canvasRef.current;
     const overlayCanvas = overlayCanvasRef.current;
     if (!canvas) return;
@@ -144,13 +149,22 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    // Send cursor position to other users
+    socketClient.sendDrawingUpdate({
+      type: 'cursor',
+      x,
+      y
+    });
+
+    if (!isDrawing) return;
+
     if (tool === 'pen' || tool === 'eraser') {
       if (!lastPoint) return;
       // Draw locally
       drawOnCanvas(x, y, lastPoint.x, lastPoint.y);
       
-      // Send to other users
-      const drawingData = {
+      // Send to other users immediately
+      socketClient.sendDrawingUpdate({
         type: 'draw' as const,
         x,
         y,
@@ -159,13 +173,7 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
         color,
         strokeWidth,
         tool
-      };
-      socketClient.sendDrawingUpdate(drawingData);
-      
-      // Save board state periodically (every 10th stroke)
-      if (Math.random() < 0.1) {
-        setTimeout(saveBoardState, 100);
-      }
+      });
       
       setLastPoint({ x, y });
     } else if ((tool === 'rectangle' || tool === 'circle') && startPoint && overlayCanvas) {
@@ -482,6 +490,26 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
               ref={overlayCanvasRef}
               className="absolute inset-0 w-full h-full pointer-events-none"
             />
+            
+            {/* Remote Cursors */}
+            {Object.entries(remoteCursors).map(([userId, cursor]) => (
+              <div
+                key={userId}
+                className="absolute pointer-events-none z-10"
+                style={{
+                  left: cursor.x - 12,
+                  top: cursor.y - 12,
+                  transform: 'translate(0, 0)'
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 3L19 12L12 13L8 19L5 3Z" fill="#3B82F6" stroke="white" strokeWidth="1"/>
+                </svg>
+                <div className="absolute top-6 left-6 bg-blue-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                  {cursor.username}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

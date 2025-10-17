@@ -7,7 +7,10 @@ import { RoomInterface } from './components/RoomInterface';
 
 const AppContent = () => {
   const { user, loading } = useAuth();
-  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(() => {
+    // Restore room ID from localStorage on app load
+    return localStorage.getItem('currentRoomId');
+  });
 
   if (loading) {
     return (
@@ -25,10 +28,16 @@ const AppContent = () => {
   }
 
   if (currentRoomId) {
-    return <RoomInterface roomId={currentRoomId} onLeave={() => setCurrentRoomId(null)} />;
+    return <RoomInterface roomId={currentRoomId} onLeave={() => {
+      setCurrentRoomId(null);
+      localStorage.removeItem('currentRoomId');
+    }} />;
   }
 
-  return <Dashboard onRoomJoin={setCurrentRoomId} />;
+  return <Dashboard onRoomJoin={(roomId) => {
+    setCurrentRoomId(roomId);
+    localStorage.setItem('currentRoomId', roomId);
+  }} />;
 };
 
 function App() {

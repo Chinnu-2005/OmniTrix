@@ -66,22 +66,17 @@ const handleConnection = (io) => {
         });
 
         socket.on('drawing-update', async (data) => {
-            console.log(`Drawing update from ${socket.user.username} in room ${socket.roomCode}:`, data);
-            
-            if (!socket.roomCode) {
-                console.log('No room code, ignoring drawing update');
-                return;
-            }
+            if (!socket.roomCode) return;
 
             try {
                 // Broadcast drawing data to other users in the room
-                console.log(`Broadcasting drawing update to room ${socket.roomCode}`);
                 socket.to(socket.roomCode).emit('drawing-update', {
                     ...data,
-                    userId: socket.userId
+                    userId: socket.userId,
+                    username: socket.user.username
                 });
 
-                // Optionally save to database for persistence
+                // Save to database for persistence (except cursor movements)
                 if (data.type === 'clear') {
                     const room = await Room.findOne({ roomId: socket.roomCode });
                     if (room) {
