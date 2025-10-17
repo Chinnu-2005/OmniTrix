@@ -19,6 +19,11 @@ app.use(express.urlencoded({extended:true}));
 app.use(express.static("public"));
 app.use(cookieparser());
 
+// Test route
+app.get('/test', (req, res) => {
+    res.json({ message: 'Server is working!' });
+});
+
 //include routes
 app.use('/api/v1/users', require('./routes/user.routes'));
 app.use('/api/v1/rooms', require('./routes/room.routes'));

@@ -18,6 +18,7 @@ class SocketClient {
       auth: {
         token: token,
       },
+
       transports: ['websocket', 'polling'],
       forceNew: true,
       reconnection: true,
