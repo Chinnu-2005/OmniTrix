@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { Pencil, Eraser, Square, Circle, Type, Palette, Download, FileImage, FileText, MessageCircle } from 'lucide-react';
+import { Pencil, Eraser, Square, Circle, Type, Palette, Download, FileImage, FileText, MessageCircle, Sparkles, X } from 'lucide-react';
 import { socketClient } from '../lib/socket';
 import { apiClient } from '../lib/api';
 
@@ -39,6 +39,9 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
   const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [remoteCursors, setRemoteCursors] = useState<{[userId: string]: {x: number, y: number, username: string}}>({});
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summary, setSummary] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -409,6 +412,74 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
 
   const colors = ['#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500'];
 
+  const summarizeWhiteboard = async () => {
+    console.log('Summarize button clicked');
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      console.log('No canvas found');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Create a temporary canvas with white background
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      
+      // Fill with white background
+      tempCtx.fillStyle = 'white';
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Draw the original canvas on top
+      tempCtx.drawImage(canvas, 0, 0);
+      
+      tempCanvas.toBlob(async (blob) => {
+        if (blob) {
+          console.log('Canvas blob created, size:', blob.size);
+          const formData = new FormData();
+          formData.append('file', blob, 'whiteboard.png');
+          formData.append('image', blob, 'whiteboard.png');
+
+          console.log('Sending request to AI API...');
+          try {
+            const apiUrl = import.meta.env.VITE_GEMINI_API_URL || 'http://127.0.0.1:5000';
+            const apiToken = import.meta.env.VITE_GEMINI_API_TOKEN || 'demo-token';
+            
+            const response = await fetch('/upload-image', {
+              method: 'POST',
+              headers: {
+                'Authorization': apiToken
+              },
+              body: formData
+            });
+
+            console.log('Response status:', response.status);
+            const result = await response.json();
+            console.log('API Response:', result);
+            
+            setSummary(result.summary || result.message || JSON.stringify(result));
+          } catch (apiError) {
+            console.log('API server not available, showing demo summary');
+            setSummary('🤖 AI Summary Demo\n\nThis whiteboard contains:\n• Drawing elements and shapes\n• Text annotations\n• Collaborative content\n\nNote: To get real AI summaries, please start the Gemini API server on port 5000.');
+          }
+          setShowSummaryModal(true);
+        } else {
+          console.log('Failed to create blob');
+          setSummary('Failed to capture whiteboard image.');
+          setShowSummaryModal(true);
+        }
+        setIsLoading(false);
+      }, 'image/png');
+    } catch (error) {
+      console.error('Error summarizing whiteboard:', error);
+      setSummary(`Error: ${error.message}`);
+      setShowSummaryModal(true);
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex">
       {/* Left Sidebar - Miro Style */}
@@ -580,6 +651,46 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
           </div>
         </div>
       </div>
+      
+      {/* AI Summarizer Button */}
+      <button
+        onClick={summarizeWhiteboard}
+        disabled={isLoading}
+        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center z-50"
+        title="AI Summarize Whiteboard"
+      >
+        {isLoading ? (
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+        ) : (
+          <Sparkles className="w-6 h-6" />
+        )}
+      </button>
+
+      {/* Summary Modal */}
+      {showSummaryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">AI Summary</h3>
+              <button
+                onClick={() => setShowSummaryModal(false)}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            <div className="text-gray-700 whitespace-pre-wrap">
+              {summary}
+            </div>
+            <button
+              onClick={() => setShowSummaryModal(false)}
+              className="mt-4 w-full px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg hover:from-orange-600 hover:to-amber-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
