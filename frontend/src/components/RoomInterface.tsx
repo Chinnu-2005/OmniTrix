@@ -23,18 +23,36 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
     loadRoomData();
     loadMessages();
     
-    // Join the room via socket
-    socketClient.joinRoom(roomId);
+    // Ensure socket is connected and join the room
+    const socket = socketClient.getSocket();
+    if (socket && socket.connected) {
+      console.log('Socket already connected, joining room:', roomId);
+      socketClient.joinRoom(roomId);
+    } else {
+      console.log('Socket not connected, waiting for connection...');
+      // Wait for socket connection then join room
+      const checkConnection = setInterval(() => {
+        const currentSocket = socketClient.getSocket();
+        if (currentSocket && currentSocket.connected) {
+          console.log('Socket connected, joining room:', roomId);
+          socketClient.joinRoom(roomId);
+          clearInterval(checkConnection);
+        }
+      }, 100);
+      
+      // Clear interval after 5 seconds to prevent infinite checking
+      setTimeout(() => clearInterval(checkConnection), 5000);
+    }
     
     // Set up socket listeners
     socketClient.onUserJoined((data) => {
       console.log('User joined:', data);
-      loadRoomData(); // Reload room data to get updated participants
+      loadRoomData();
     });
     
     socketClient.onUserLeft((data) => {
       console.log('User left:', data);
-      loadRoomData(); // Reload room data to get updated participants
+      loadRoomData();
     });
     
     socketClient.onChatMessage((message) => {

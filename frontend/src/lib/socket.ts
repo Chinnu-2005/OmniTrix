@@ -13,11 +13,11 @@ class SocketClient {
       auth: {
         token: token,
       },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
     });
 
     this.socket.on('connect', () => {
-      console.log('Connected to server');
+      console.log('Connected to server with socket ID:', this.socket?.id);
     });
 
     this.socket.on('disconnect', () => {
@@ -26,6 +26,10 @@ class SocketClient {
 
     this.socket.on('error', (error: string) => {
       console.error('Socket error:', error);
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
     });
 
     return this.socket;
@@ -45,8 +49,11 @@ class SocketClient {
   }
 
   sendDrawingUpdate(data: any) {
-    if (this.socket) {
+    if (this.socket && this.socket.connected) {
+      console.log('Sending drawing update via socket:', data);
       this.socket.emit('drawing-update', data);
+    } else {
+      console.error('Socket not connected, cannot send drawing update');
     }
   }
 

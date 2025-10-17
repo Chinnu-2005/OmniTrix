@@ -33,9 +33,18 @@ const handleConnection = (io) => {
         console.log(`User ${socket.user.username} connected`);
 
         socket.on('join-room', async (roomCode) => {
+            console.log(`User ${socket.user.username} attempting to join room: ${roomCode}`);
+            
             try {
                 const room = await Room.findOne({ roomId: roomCode });
-                if (!room || !room.participants.includes(socket.userId)) {
+                if (!room) {
+                    console.log(`Room ${roomCode} not found`);
+                    socket.emit('error', 'Room not found');
+                    return;
+                }
+                
+                if (!room.participants.includes(socket.userId)) {
+                    console.log(`User ${socket.userId} not in participants list for room ${roomCode}`);
                     socket.emit('error', 'Access denied');
                     return;
                 }
@@ -43,21 +52,30 @@ const handleConnection = (io) => {
                 socket.join(roomCode);
                 socket.roomCode = roomCode;
                 
+                console.log(`User ${socket.user.username} successfully joined room: ${roomCode}`);
+                
                 socket.to(roomCode).emit('user-joined', {
                     userId: socket.userId,
                     username: socket.user.username,
                     avatar: socket.user.avatar
                 });
             } catch (error) {
+                console.error('Error joining room:', error);
                 socket.emit('error', 'Failed to join room');
             }
         });
 
         socket.on('drawing-update', async (data) => {
-            if (!socket.roomCode) return;
+            console.log(`Drawing update from ${socket.user.username} in room ${socket.roomCode}:`, data);
+            
+            if (!socket.roomCode) {
+                console.log('No room code, ignoring drawing update');
+                return;
+            }
 
             try {
                 // Broadcast drawing data to other users in the room
+                console.log(`Broadcasting drawing update to room ${socket.roomCode}`);
                 socket.to(socket.roomCode).emit('drawing-update', {
                     ...data,
                     userId: socket.userId
@@ -74,6 +92,7 @@ const handleConnection = (io) => {
                     }
                 }
             } catch (error) {
+                console.error('Error handling drawing update:', error);
                 socket.emit('error', 'Failed to update drawing');
             }
         });

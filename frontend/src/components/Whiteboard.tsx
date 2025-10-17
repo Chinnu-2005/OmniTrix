@@ -40,10 +40,9 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Join room and listen for drawing updates
-    socketClient.joinRoom(roomId);
-
+    // Listen for drawing updates from other users
     const handleDrawingUpdate = (data: DrawingData) => {
+      console.log('Received drawing update:', data);
       if (data.type === 'draw' && data.x !== undefined && data.y !== undefined) {
         drawOnCanvas(data.x, data.y, data.prevX, data.prevY, data.color || '#000000', data.strokeWidth || 2, data.tool || 'pen');
       } else if (data.type === 'clear') {
@@ -107,8 +106,8 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
       drawOnCanvas(x, y, lastPoint.x, lastPoint.y);
       
       // Send to other users
-      socketClient.sendDrawingUpdate({
-        type: 'draw',
+      const drawingData = {
+        type: 'draw' as const,
         x,
         y,
         prevX: lastPoint.x,
@@ -116,7 +115,9 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
         color,
         strokeWidth,
         tool
-      });
+      };
+      console.log('Sending drawing update:', drawingData);
+      socketClient.sendDrawingUpdate(drawingData);
       
       setLastPoint({ x, y });
     }
