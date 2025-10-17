@@ -10,3 +10,15 @@ services:
         value: production
       - key: PORT
         value: 10000
+
+  - type: web
+    name: xlr8-frontend
+    env: static
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://omnitrix-afyc.onrender.com/api/v1
+      - key: VITE_SOCKET_URL
+        value: https://omnitrix-afyc.onrender.com
