@@ -447,7 +447,7 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
             const apiUrl = import.meta.env.VITE_GEMINI_API_URL || 'http://127.0.0.1:5000';
             const apiToken = import.meta.env.VITE_GEMINI_API_TOKEN || 'demo-token';
             
-            const response = await fetch('/upload-image', {
+            const response = await fetch(`${apiUrl}/upload-image`, {
               method: 'POST',
               headers: {
                 'Authorization': apiToken

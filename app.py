@@ -10,7 +10,7 @@ import io
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/": {"origins": "*"}}, supports_credentials=True)
+CORS(app, origins="*", methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -33,6 +33,14 @@ def clean_text(text):
 @app.route('/')
 def home():
     return "AI Summary Service is Running!"
+
+@app.route('/test', methods=['GET'])
+def test():
+    return jsonify({"status": "success", "message": "AI server is working!"})
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "healthy", "service": "AI Summary Service"})
 
 @app.route('/upload-image', methods=['POST'])
 def upload_and_process_image():

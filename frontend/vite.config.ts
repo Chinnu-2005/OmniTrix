@@ -6,10 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    port: 5173,
-    proxy: {
-      '/upload-image': 'https://omnitrix-ai.onrender.com'
-    }
+    port: 5173
   },
   optimizeDeps: {
     exclude: ['lucide-react'],
