@@ -113,6 +113,10 @@ const boardSchema = new Schema(
             type: Number,
             default: 0
         },
+        // Canvas image data for persistence
+        imageData: {
+            type: String // Base64 encoded image data
+        },
         // Last modified info
         lastModifiedBy: {
             type: Schema.Types.ObjectId,
