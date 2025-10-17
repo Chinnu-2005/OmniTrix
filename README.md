@@ -1,4 +1,4 @@
-# XLR8 - Collaborative Whiteboard Application
+# IsarkBoard - Collaborative Whiteboard Application
 
 A real-time collaborative whiteboard application built with React (frontend) and Node.js (backend).
 
@@ -47,7 +47,7 @@ A real-time collaborative whiteboard application built with React (frontend) and
 3. Create a `.env` file in the backend directory with the following variables:
    ```env
    PORT=3000
-   MONGODB_URI=mongodb://localhost:27017/xlr8
+   MONGODB_URI=mongodb://localhost:27017/isarkboard
    ACCESS_TOKEN_SECRET=your_access_token_secret_here
    ACCESS_TOKEN_EXPIRY=1d
    REFRESH_TOKEN_SECRET=your_refresh_token_secret_here

@@ -1,6 +1,7 @@
 const User = require('../models/user');
 const ApiError = require('../utils/apiError');
 const ApiResponse = require('../utils/apiResponse');
+const { uploadOnCloudinary } = require('../utils/cloudinary');
 
 const signup = async (req, res) => {
     try {
@@ -91,4 +92,42 @@ const logout = async (req, res) => {
     }
 };
 
-module.exports = { signup, login, logout };
+const getProfile = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select('-password -refreshToken');
+        res.status(200).json(new ApiResponse(200, "Profile fetched successfully", user));
+    } catch (error) {
+        res.status(500).json(new ApiError(500, error.message));
+    }
+};
+
+const updateProfile = async (req, res) => {
+    try {
+        const { username } = req.body;
+        const userId = req.user._id;
+        
+        let avatarUrl = req.user.avatar;
+        
+        if (req.file) {
+            const result = await uploadOnCloudinary(req.file.path);
+            if (result) {
+                avatarUrl = result.url;
+            }
+        }
+        
+        const user = await User.findByIdAndUpdate(
+            userId,
+            { 
+                ...(username && { username }),
+                ...(avatarUrl && { avatar: avatarUrl })
+            },
+            { new: true }
+        ).select('-password -refreshToken');
+        
+        res.status(200).json(new ApiResponse(200, "Profile updated successfully", user));
+    } catch (error) {
+        res.status(500).json(new ApiError(500, error.message));
+    }
+};
+
+module.exports = { signup, login, logout, getProfile, updateProfile };

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { Zap, LogOut, Moon, Sun, Users, Copy, Check, ArrowLeft, MessageCircle, X, Send, Download, FileImage, FileText } from 'lucide-react';
+import { Zap, LogOut, Moon, Sun, Users, Copy, Check, ArrowLeft, MessageCircle, X, Send, Download, FileImage, FileText, User as UserIcon, Camera } from 'lucide-react';
 import { apiClient, Room, User } from '../lib/api';
 import { socketClient } from '../lib/socket';
 import { Whiteboard } from './Whiteboard';
@@ -22,11 +22,17 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
   const [showChat, setShowChat] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    loadRoomData();
-    loadMessages();
+    const loadData = async () => {
+      setIsLoading(true);
+      await Promise.all([loadRoomData(), loadMessages()]);
+      setIsLoading(false);
+    };
+    loadData();
     
     // Ensure socket is connected and join the room
     const socket = socketClient.getSocket();
@@ -49,10 +55,13 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
       setTimeout(() => clearInterval(checkConnection), 5000);
     }
     
-    // Close export menu when clicking outside
+    // Close menus when clicking outside
     const handleClickOutside = (event: MouseEvent) => {
       if (showExportMenu) {
         setShowExportMenu(false);
+      }
+      if (showProfileMenu) {
+        setShowProfileMenu(false);
       }
     };
     
@@ -61,7 +70,7 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [roomId, showExportMenu]);
+  }, [roomId, showExportMenu, showProfileMenu]);
 
   // Separate useEffect for socket listeners to prevent duplicate listeners
   useEffect(() => {
@@ -112,8 +121,22 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
 
   const loadRoomData = async () => {
     try {
+      // Check cache first
+      const cachedRooms = sessionStorage.getItem('userRooms');
+      if (cachedRooms) {
+        const rooms = JSON.parse(cachedRooms);
+        const foundRoom = rooms.find((r: Room) => r.roomId === roomId);
+        if (foundRoom) {
+          setRoom(foundRoom);
+          setParticipants(foundRoom.participants || []);
+        }
+      }
+
       const response = await apiClient.getUserRooms();
       if (response.success) {
+        // Cache the rooms data
+        sessionStorage.setItem('userRooms', JSON.stringify(response.data));
+        
         const foundRoom = response.data.find(r => r.roomId === roomId);
         if (foundRoom) {
           setRoom(foundRoom);
@@ -127,9 +150,17 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
 
   const loadMessages = async () => {
     try {
+      // Check cache first
+      const cachedMessages = sessionStorage.getItem(`messages-${roomId}`);
+      if (cachedMessages) {
+        setMessages(JSON.parse(cachedMessages));
+      }
+
       const response = await apiClient.getRoomMessages(roomId);
       if (response.success) {
         setMessages(response.data);
+        // Cache messages
+        sessionStorage.setItem(`messages-${roomId}`, JSON.stringify(response.data));
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -145,6 +176,9 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
   };
 
   const handleLeaveRoom = async () => {
+    // Clear cache when leaving room to ensure fresh data on return
+    sessionStorage.removeItem(`board-${roomId}`);
+    sessionStorage.removeItem(`messages-${roomId}`);
     onLeave();
   };
 
@@ -196,17 +230,33 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
                 </button>
                 
                 {showExportMenu && (
-                  <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                  <div 
+                    className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
                     <div className="py-2">
                       <button
-                        onClick={() => {
-                          // Call export function from whiteboard
-                          const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('PNG export clicked');
+                          const canvases = document.querySelectorAll('canvas');
+                          console.log('Found canvases:', canvases.length);
+                          const canvas = canvases[0] as HTMLCanvasElement;
                           if (canvas) {
+                            console.log('Canvas dimensions:', canvas.width, canvas.height);
+                            const dataURL = canvas.toDataURL('image/png');
+                            console.log('DataURL length:', dataURL.length);
                             const link = document.createElement('a');
-                            link.download = `whiteboard-${roomId}-${new Date().toISOString().split('T')[0]}.png`;
-                            link.href = canvas.toDataURL();
+                            link.href = dataURL;
+                            link.download = 'whiteboard.png';
+                            document.body.appendChild(link);
                             link.click();
+                            document.body.removeChild(link);
+                            console.log('Download triggered');
+                          } else {
+                            console.log('No canvas found');
                           }
                           setShowExportMenu(false);
                         }}
@@ -216,19 +266,24 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
                         Export as PNG
                       </button>
                       <button
-                        onClick={async () => {
-                          // Call PDF export function
+                        type="button"
+                        onMouseDown={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('PDF export clicked');
                           const canvas = document.querySelector('canvas') as HTMLCanvasElement;
                           if (canvas) {
-                            const { jsPDF } = await import('jspdf');
-                            const imgData = canvas.toDataURL('image/png');
-                            const pdf = new jsPDF({
-                              orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-                              unit: 'px',
-                              format: [canvas.width, canvas.height]
-                            });
-                            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-                            pdf.save(`whiteboard-${roomId}-${new Date().toISOString().split('T')[0]}.pdf`);
+                            try {
+                              const { jsPDF } = await import('jspdf');
+                              console.log('jsPDF loaded');
+                              const pdf = new jsPDF();
+                              const imgData = canvas.toDataURL('image/png');
+                              pdf.addImage(imgData, 'PNG', 10, 10, 180, 160);
+                              pdf.save('whiteboard.pdf');
+                              console.log('PDF saved');
+                            } catch (error) {
+                              console.error('PDF export error:', error);
+                            }
                           }
                           setShowExportMenu(false);
                         }}
@@ -282,13 +337,77 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
                   <Sun className="w-5 h-5 text-gray-300" />
                 )}
               </button>
-              <button
-                onClick={signOut}
-                className="flex items-center px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors duration-200"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </button>
+              
+              {/* Profile Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white text-sm font-medium hover:from-blue-600 hover:to-blue-800 transition-colors"
+                  title={user?.username}
+                >
+                  {user?.avatar ? (
+                    <img src={user.avatar} alt={user.username} className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    user?.username?.charAt(0).toUpperCase()
+                  )}
+                </button>
+                
+                {showProfileMenu && (
+                  <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center space-x-3">
+                        <div className="relative">
+                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white font-medium">
+                            {user?.avatar ? (
+                              <img src={user.avatar} alt={user.username} className="w-full h-full rounded-full object-cover" />
+                            ) : (
+                              user?.username?.charAt(0).toUpperCase()
+                            )}
+                          </div>
+                          <label className="absolute -bottom-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center cursor-pointer hover:bg-blue-600 transition-colors">
+                            <Camera className="w-3 h-3 text-white" />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const formData = new FormData();
+                                  formData.append('avatar', file);
+                                  try {
+                                    await apiClient.updateProfile(formData);
+                                    window.location.reload();
+                                  } catch (error) {
+                                    console.error('Avatar update failed:', error);
+                                  }
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white">{user?.username}</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{user?.email}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="py-2">
+                      <button
+                        onClick={() => {
+                          signOut();
+                          setShowProfileMenu(false);
+                        }}
+                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         </div>
@@ -296,7 +415,16 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
 
       <div className="flex-1 flex relative">
         <main className="flex-1 flex">
-          <Whiteboard roomId={roomId} />
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-800">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600 dark:text-gray-400">Loading whiteboard...</p>
+              </div>
+            </div>
+          ) : (
+            <Whiteboard roomId={roomId} />
+          )}
         </main>
         
         {/* Chat Sidebar */}

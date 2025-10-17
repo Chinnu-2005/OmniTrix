@@ -3,6 +3,13 @@ import { Pencil, Eraser, Square, Circle, Type, Palette, Download, FileImage, Fil
 import { socketClient } from '../lib/socket';
 import { apiClient } from '../lib/api';
 
+// Extend Window interface for timeout
+declare global {
+  interface Window {
+    saveBoardTimeout?: NodeJS.Timeout;
+  }
+}
+
 interface WhiteboardProps {
   roomId: string;
 }
@@ -176,6 +183,9 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
       });
       
       setLastPoint({ x, y });
+      
+      // Auto-save after drawing
+      saveBoardState();
     } else if ((tool === 'rectangle' || tool === 'circle') && startPoint && overlayCanvas) {
       // Clear overlay and draw preview shape
       const overlayCtx = overlayCanvas.getContext('2d');
@@ -245,7 +255,7 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
       socketClient.sendDrawingUpdate(shapeData);
       
       // Save board state after shape
-      setTimeout(saveBoardState, 100);
+      saveBoardState();
     }
 
     setIsDrawing(false);
@@ -255,6 +265,24 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
 
   const loadBoardState = async () => {
     try {
+      // Check if we have cached board data
+      const cachedData = sessionStorage.getItem(`board-${roomId}`);
+      if (cachedData) {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        
+        const img = new Image();
+        img.onload = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+        };
+        img.src = cachedData;
+        return;
+      }
+
       const response = await apiClient.getBoard(roomId);
       if (response.success && response.data.imageData) {
         const canvas = canvasRef.current;
@@ -267,6 +295,8 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
         img.onload = () => {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0);
+          // Cache the board data
+          sessionStorage.setItem(`board-${roomId}`, response.data.imageData);
         };
         img.src = response.data.imageData;
       }
@@ -281,14 +311,35 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
     
     try {
       const imageData = canvas.toDataURL();
-      await fetch(`${import.meta.env.VITE_API_BASE_URL}/boards/${roomId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
-        body: JSON.stringify({ imageData })
-      });
+      // Update cache immediately
+      sessionStorage.setItem(`board-${roomId}`, imageData);
+      
+      // Debounce server save to reduce API calls
+      if (window.saveBoardTimeout) {
+        clearTimeout(window.saveBoardTimeout);
+      }
+      
+      window.saveBoardTimeout = setTimeout(async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/boards/${roomId}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            },
+            credentials: 'include',
+            body: JSON.stringify({ imageData })
+          });
+          
+          if (!response.ok) {
+            console.error('Failed to save board:', response.statusText);
+          } else {
+            console.log('Board saved successfully');
+          }
+        } catch (error) {
+          console.error('Error saving board:', error);
+        }
+      }, 1000);
     } catch (error) {
       console.error('Error saving board state:', error);
     }
@@ -298,28 +349,44 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const link = document.createElement('a');
-    link.download = `whiteboard-${roomId}-${new Date().toISOString().split('T')[0]}.png`;
-    link.href = canvas.toDataURL();
-    link.click();
+    try {
+      const link = document.createElement('a');
+      link.download = `whiteboard-${roomId}-${new Date().toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error exporting image:', error);
+    }
   };
 
   const exportAsPDF = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Dynamic import for jsPDF to reduce bundle size
-    const { jsPDF } = await import('jspdf');
-    
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({
-      orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-      unit: 'px',
-      format: [canvas.width, canvas.height]
-    });
-    
-    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-    pdf.save(`whiteboard-${roomId}-${new Date().toISOString().split('T')[0]}.pdf`);
+    try {
+      const { jsPDF } = await import('jspdf');
+      
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      
+      // Convert pixels to mm (jsPDF default unit)
+      const pdfWidth = imgWidth * 0.264583;
+      const pdfHeight = imgHeight * 0.264583;
+      
+      const pdf = new jsPDF({
+        orientation: imgWidth > imgHeight ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: [pdfWidth, pdfHeight]
+      });
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`whiteboard-${roomId}-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+    }
   };
 
   const clearCanvas = () => {

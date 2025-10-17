@@ -121,6 +121,33 @@ class ApiClient {
   async getRoomMessages(roomId: string): Promise<ApiResponse<any[]>> {
     return this.request(`/chat/${roomId}`);
   }
+
+  // Profile endpoints
+  async getProfile(): Promise<ApiResponse<User>> {
+    return this.request('/users/profile');
+  }
+
+  async updateProfile(formData: FormData): Promise<ApiResponse<User>> {
+    const url = `${this.baseURL}/users/profile`;
+    
+    const config: RequestInit = {
+      method: 'PUT',
+      body: formData,
+      headers: {
+        ...(this.token && { Authorization: `Bearer ${this.token}` })
+      },
+      credentials: 'include'
+    };
+
+    const response = await fetch(url, config);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Profile update failed');
+    }
+
+    return data;
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

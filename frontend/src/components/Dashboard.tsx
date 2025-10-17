@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiClient, Room } from '../lib/api';
 import { JoinRoomModal } from './JoinRoomModal';
 import { CreateRoomModal } from './CreateRoomModal';
-import { Home, Clock, Star, Search, Bell, Gift, LogOut, Plus, Users, X, User as UserIcon, Mail, Calendar } from 'lucide-react';
+import { Home, Clock, Star, Search, Bell, Gift, LogOut, Plus, Users, X, User as UserIcon, Mail, Calendar, Camera } from 'lucide-react';
 
 interface DashboardProps {
   onRoomJoin: (roomId: string) => void;
@@ -19,10 +19,27 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   useEffect(() => {
     loadUserRooms();
-  }, []);
+    
+    // Close profile menu when clicking outside
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showProfileMenu) {
+        const target = event.target as Element;
+        const profileDropdown = document.querySelector('[data-profile-dropdown]');
+        if (profileDropdown && !profileDropdown.contains(target)) {
+          setShowProfileMenu(false);
+        }
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showProfileMenu]);
 
   const loadUserRooms = async () => {
     try {
@@ -90,7 +107,11 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-bold text-lg shadow-md cursor-pointer" title="View Profile">
-              {user?.username?.charAt(0).toUpperCase() || 'U'}
+              {user?.avatar ? (
+                <img src={user.avatar} alt={user.username} className="w-full h-full rounded-lg object-cover" />
+              ) : (
+                user?.username?.charAt(0).toUpperCase() || 'U'
+              )}
             </div>
             <div className="flex-1">
               <h2 className="font-bold text-gray-800 text-[18px]">
@@ -168,7 +189,7 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
         {/* Navbar */}
         <header className="h-16 border-b border-gray-200 bg-white flex items-center justify-between px-8 shadow-sm">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-gray-800">XLR8</h1>
+            <h1 className="text-3xl font-bold text-gray-800">IsarkBoard</h1>
             <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-600 text-sm font-semibold rounded">
               Free
             </span>
@@ -182,8 +203,78 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
               <Bell className="w-5 h-5 text-gray-600" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </button>
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer" title="View Profile">
-              {user?.username?.charAt(0).toUpperCase() || 'U'}
+            <div className="relative">
+              <button
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-bold text-sm shadow-md hover:shadow-lg transition-all"
+                title="View Profile"
+              >
+                {user?.avatar ? (
+                  <img src={user.avatar} alt={user.username} className="w-full h-full rounded-full object-cover" />
+                ) : (
+                  user?.username?.charAt(0).toUpperCase() || 'U'
+                )}
+              </button>
+              
+              {showProfileMenu && (
+                <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50" data-profile-dropdown>
+                  <div className="p-4 border-b border-gray-200">
+                    <div className="flex items-center space-x-3">
+                      <div className="relative">
+                        <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-amber-500 rounded-full flex items-center justify-center text-white font-medium">
+                          {user?.avatar ? (
+                            <img src={user.avatar} alt={user.username} className="w-full h-full rounded-full object-cover" />
+                          ) : (
+                            user?.username?.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <label 
+                          className="absolute -bottom-1 -right-1 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center cursor-pointer hover:bg-orange-600 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Camera className="w-3 h-3 text-white" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={async (e) => {
+                              e.stopPropagation();
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const formData = new FormData();
+                                formData.append('avatar', file);
+                                try {
+                                  await apiClient.updateProfile(formData);
+                                  window.location.reload();
+                                } catch (error) {
+                                  console.error('Avatar update failed:', error);
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">{user?.username}</h3>
+                        <p className="text-sm text-gray-500">{user?.email}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="py-2">
+                    <button
+                      onClick={() => {
+                        signOut();
+                        setShowProfileMenu(false);
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
