@@ -34,15 +34,23 @@ def clean_text(text):
 def home():
     return "AI Summary Service is Running!"
 
-@app.route('/test', methods=['GET'])
+@app.route('/ai/test', methods=['GET'])
 def test():
     return jsonify({"status": "success", "message": "AI server is working!"})
 
-@app.route('/health', methods=['GET'])
+@app.route('/ai/health', methods=['GET'])
 def health():
     return jsonify({"status": "healthy", "service": "AI Summary Service"})
 
-@app.route('/upload-image', methods=['POST'])
+@app.route('/test', methods=['GET'])
+def test_root():
+    return jsonify({"status": "success", "message": "AI server is working!"})
+
+@app.route('/health', methods=['GET'])
+def health_root():
+    return jsonify({"status": "healthy", "service": "AI Summary Service"})
+
+@app.route('/ai/upload-image', methods=['POST'])
 def upload_and_process_image():
     token = request.headers.get('Authorization')
     if token != f"Bearer {SECRET_TOKEN}":

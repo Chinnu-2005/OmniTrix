@@ -447,7 +447,7 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
             const apiUrl = import.meta.env.VITE_GEMINI_API_URL || 'http://127.0.0.1:5000';
             const apiToken = import.meta.env.VITE_GEMINI_API_TOKEN || 'demo-token';
             
-            const response = await fetch(`${apiUrl}/upload-image`, {
+            const response = await fetch(`${apiUrl}/ai/upload-image`, {
               method: 'POST',
               headers: {
                 'Authorization': apiToken
@@ -456,10 +456,14 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
             });
 
             console.log('Response status:', response.status);
-            const result = await response.json();
-            console.log('API Response:', result);
             
-            setSummary(result.summary || result.message || JSON.stringify(result));
+            if (response.ok) {
+              const result = await response.json();
+              console.log('API Response:', result);
+              setSummary(result.summary || result.message || JSON.stringify(result));
+            } else {
+              throw new Error(`HTTP ${response.status}`);
+            }
           } catch (apiError) {
             console.log('API server not available, showing demo summary');
             setSummary('🤖 AI Summary Demo\n\nThis whiteboard contains:\n• Drawing elements and shapes\n• Text annotations\n• Collaborative content\n\nNote: To get real AI summaries, please start the Gemini API server on port 5000.');
