@@ -8,7 +8,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     proxy: {
-      '/upload-image': 'http://127.0.0.1:5000'
+      '/upload-image': 'https://omnitrix-ai.onrender.com'
     }
   },
   optimizeDeps: {
