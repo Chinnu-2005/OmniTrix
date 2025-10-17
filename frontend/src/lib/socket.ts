@@ -93,6 +93,12 @@ class SocketClient {
     }
   }
 
+  offChatMessage(callback: (data: any) => void) {
+    if (this.socket) {
+      this.socket.off('chat-message', callback);
+    }
+  }
+
   onVoiceToggle(callback: (data: any) => void) {
     if (this.socket) {
       this.socket.on('voice-toggle', callback);

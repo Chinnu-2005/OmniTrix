@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Zap, LogOut, Moon, Sun, Users, Copy, Check, ArrowLeft, MessageCircle, X, Send, Download, FileImage, FileText } from 'lucide-react';
@@ -22,6 +22,7 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
   const [showChat, setShowChat] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadRoomData();
@@ -48,24 +49,6 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
       setTimeout(() => clearInterval(checkConnection), 5000);
     }
     
-    // Set up socket listeners
-    socketClient.onUserJoined((data) => {
-      console.log('User joined:', data);
-      loadRoomData();
-    });
-    
-    socketClient.onUserLeft((data) => {
-      console.log('User left:', data);
-      loadRoomData();
-    });
-    
-    socketClient.onChatMessage((message) => {
-      setMessages(prev => [...prev, message]);
-    });
-    
-    // Load existing messages
-    loadMessages();
-    
     // Close export menu when clicking outside
     const handleClickOutside = (event: MouseEvent) => {
       if (showExportMenu) {
@@ -79,6 +62,51 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [roomId, showExportMenu]);
+
+  // Separate useEffect for socket listeners to prevent duplicate listeners
+  useEffect(() => {
+    const socket = socketClient.getSocket();
+    if (!socket) return;
+
+    const handleUserJoined = (data: any) => {
+      console.log('User joined:', data);
+      loadRoomData();
+    };
+    
+    const handleUserLeft = (data: any) => {
+      console.log('User left:', data);
+      loadRoomData();
+    };
+    
+    const handleChatMessage = (message: any) => {
+      console.log('Received chat message:', message);
+      setMessages(prev => {
+        // Prevent duplicate messages by checking if message already exists
+        const exists = prev.some(msg => msg._id === message._id);
+        if (exists) {
+          return prev;
+        }
+        return [...prev, message];
+      });
+    };
+
+    // Set up socket listeners
+    socket.on('user-joined', handleUserJoined);
+    socket.on('user-left', handleUserLeft);
+    socket.on('chat-message', handleChatMessage);
+    
+    // Cleanup listeners on unmount or roomId change
+    return () => {
+      socket.off('user-joined', handleUserJoined);
+      socket.off('user-left', handleUserLeft);
+      socket.off('chat-message', handleChatMessage);
+    };
+  }, [roomId]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const loadRoomData = async () => {
     try {
@@ -298,6 +326,7 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
                   </div>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
             
             <div className="p-4 border-t border-gray-200">
@@ -308,7 +337,8 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && newMessage.trim()) {
-                      socketClient.sendChatMessage({ text: newMessage });
+                      const messageText = newMessage.trim();
+                      socketClient.sendChatMessage({ text: messageText });
                       setNewMessage('');
                     }
                   }}
@@ -317,8 +347,9 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
                 />
                 <button 
                   onClick={() => {
-                    if (newMessage.trim()) {
-                      socketClient.sendChatMessage({ text: newMessage });
+                    const messageText = newMessage.trim();
+                    if (messageText) {
+                      socketClient.sendChatMessage({ text: messageText });
                       setNewMessage('');
                     }
                   }}

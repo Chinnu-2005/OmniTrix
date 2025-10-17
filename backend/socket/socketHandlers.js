@@ -107,6 +107,7 @@ const handleConnection = (io) => {
                 const populatedMessage = await Chat.findById(chatMessage._id)
                     .populate('sender', 'username avatar');
 
+                // Send to all users in the room (including sender for immediate feedback)
                 io.to(socket.roomCode).emit('chat-message', populatedMessage);
             } catch (error) {
                 socket.emit('error', 'Failed to send message');
