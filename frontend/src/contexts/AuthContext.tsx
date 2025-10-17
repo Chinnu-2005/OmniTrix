@@ -40,14 +40,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signIn = async (email: string, password: string) => {
-    const response = await apiClient.login(email, password);
-    
-    const { user: userData, accessToken } = response.data;
-    setUser(userData);
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('userData', JSON.stringify(userData));
-    apiClient.setToken(accessToken);
-    socketClient.connect(accessToken);
+    try {
+      const response = await apiClient.login(email, password);
+      
+      if (response.success && response.data) {
+        const { user: userData, accessToken } = response.data;
+        setUser(userData);
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('userData', JSON.stringify(userData));
+        apiClient.setToken(accessToken);
+        socketClient.connect(accessToken);
+      } else {
+        throw new Error('Login failed');
+      }
+    } catch (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
   };
 
   const signOut = async () => {

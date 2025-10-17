@@ -57,22 +57,22 @@ const handleConnection = (io) => {
             if (!socket.roomCode) return;
 
             try {
-                const room = await Room.findOne({ roomId: socket.roomCode });
-                const board = await Board.findOne({ roomId: room._id });
-
-                if (data.type === 'add-element') {
-                    await board.addElement({
-                        ...data.element,
-                        createdBy: socket.userId
-                    });
-                } else if (data.type === 'clear-board') {
-                    await board.clearBoard(socket.userId);
-                }
-
+                // Broadcast drawing data to other users in the room
                 socket.to(socket.roomCode).emit('drawing-update', {
                     ...data,
                     userId: socket.userId
                 });
+
+                // Optionally save to database for persistence
+                if (data.type === 'clear') {
+                    const room = await Room.findOne({ roomId: socket.roomCode });
+                    if (room) {
+                        const board = await Board.findOne({ roomId: room._id });
+                        if (board) {
+                            await board.clearBoard(socket.userId);
+                        }
+                    }
+                }
             } catch (error) {
                 socket.emit('error', 'Failed to update drawing');
             }

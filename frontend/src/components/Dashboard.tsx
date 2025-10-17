@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient, Room } from '../lib/api';
 import { JoinRoomModal } from './JoinRoomModal';
-import { Home, Clock, Star, Search, Bell, Gift, LogOut, Plus, Users } from 'lucide-react';
+import { CreateRoomModal } from './CreateRoomModal';
+import { Home, Clock, Star, Search, Bell, Gift, LogOut, Plus, Users, X, User as UserIcon, Mail, Calendar } from 'lucide-react';
 
 interface DashboardProps {
   onRoomJoin: (roomId: string) => void;
@@ -16,6 +17,8 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showUserProfile, setShowUserProfile] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     loadUserRooms();
@@ -61,16 +64,17 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
     },
   ];
 
-  const handleCreateRoom = async () => {
+  const handleCreateRoom = async (roomName: string) => {
     try {
-      const roomName = `${user?.username}'s Room ${new Date().toLocaleDateString()}`;
       const response = await apiClient.createRoom(roomName);
       if (response.success) {
         onRoomJoin(response.data.roomId);
+        await loadUserRooms(); // Refresh rooms list
       }
     } catch (err) {
       setError('Failed to create room');
       console.error('Error creating room:', err);
+      throw err;
     }
   };
 
@@ -201,7 +205,7 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
               <div className="flex gap-6 overflow-x-auto pb-4">
                 {/* Blank Canvas */}
                 <button
-                  onClick={handleCreateRoom}
+                  onClick={() => setShowCreateModal(true)}
                   className="flex-shrink-0 w-60 h-60 bg-white rounded-2xl border-2 border-gray-200 hover:border-orange-400 hover:shadow-lg transition-all flex flex-col items-center justify-center gap-2 "
                 >
                   <img src="data:image/jpeg;base64,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" alt="Blank Canvas" className="w-30 h-30 rounded-lg" />
@@ -241,7 +245,7 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
                     Join Room
                   </button>
                   <button
-                    onClick={handleCreateRoom}
+                    onClick={() => setShowCreateModal(true)}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg font-semibold text-[16px] shadow-md hover:shadow-lg hover:scale-105 transition-all"
                   >
                     <Plus className="w-4 h-4" />
@@ -292,6 +296,13 @@ export const Dashboard = ({ onRoomJoin }: DashboardProps) => {
         isOpen={showJoinModal}
         onClose={() => setShowJoinModal(false)}
         onRoomJoined={onRoomJoin}
+      />
+      
+      <CreateRoomModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onRoomCreated={onRoomJoin}
+        onCreateRoom={handleCreateRoom}
       />
     </div>
   );

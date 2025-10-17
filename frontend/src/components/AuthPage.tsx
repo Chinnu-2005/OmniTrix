@@ -62,6 +62,10 @@ export const AuthPage = () => {
         await signIn(email, password);
       } else {
         await signUp(email, password, username);
+        // Switch to login mode after successful signup
+        setMode('login');
+        setError('');
+        setPassword('');
       }
     } catch (err) {
       if (err instanceof Error) setError(err.message);

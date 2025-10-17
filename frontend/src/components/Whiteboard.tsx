@@ -1,8 +1,20 @@
 import { useRef, useEffect, useState } from 'react';
 import { Pencil, Eraser, Square, Circle, Type, Palette } from 'lucide-react';
+import { socketClient } from '../lib/socket';
 
 interface WhiteboardProps {
   roomId: string;
+}
+
+interface DrawingData {
+  type: 'draw' | 'clear';
+  x?: number;
+  y?: number;
+  prevX?: number;
+  prevY?: number;
+  color?: string;
+  strokeWidth?: number;
+  tool?: string;
 }
 
 export const Whiteboard = ({ roomId }: WhiteboardProps) => {
@@ -11,6 +23,7 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
   const [tool, setTool] = useState<'pen' | 'eraser' | 'rectangle' | 'circle' | 'text'>('pen');
   const [color, setColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(2);
+  const [lastPoint, setLastPoint] = useState<{x: number, y: number} | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -26,7 +39,46 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
     // Set default styles
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-  }, []);
+
+    // Join room and listen for drawing updates
+    socketClient.joinRoom(roomId);
+
+    const handleDrawingUpdate = (data: DrawingData) => {
+      if (data.type === 'draw' && data.x !== undefined && data.y !== undefined) {
+        drawOnCanvas(data.x, data.y, data.prevX, data.prevY, data.color || '#000000', data.strokeWidth || 2, data.tool || 'pen');
+      } else if (data.type === 'clear') {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    };
+
+    socketClient.onDrawingUpdate(handleDrawingUpdate);
+
+    return () => {
+      // Cleanup socket listeners
+      const socket = socketClient.getSocket();
+      if (socket) {
+        socket.off('drawing-update', handleDrawingUpdate);
+      }
+    };
+  }, [roomId]);
+
+  const drawOnCanvas = (x: number, y: number, prevX?: number, prevY?: number, drawColor = color, drawStrokeWidth = strokeWidth, drawTool = tool) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.strokeStyle = drawTool === 'eraser' ? '#ffffff' : drawColor;
+    ctx.lineWidth = drawTool === 'eraser' ? drawStrokeWidth * 3 : drawStrokeWidth;
+    
+    if (prevX !== undefined && prevY !== undefined) {
+      ctx.beginPath();
+      ctx.moveTo(prevX, prevY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+  };
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -37,18 +89,11 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
     const y = e.clientY - rect.top;
 
     setIsDrawing(true);
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-    ctx.lineWidth = tool === 'eraser' ? strokeWidth * 3 : strokeWidth;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+    setLastPoint({ x, y });
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawing || !lastPoint) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -57,17 +102,29 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
     if (tool === 'pen' || tool === 'eraser') {
-      ctx.lineTo(x, y);
-      ctx.stroke();
+      // Draw locally
+      drawOnCanvas(x, y, lastPoint.x, lastPoint.y);
+      
+      // Send to other users
+      socketClient.sendDrawingUpdate({
+        type: 'draw',
+        x,
+        y,
+        prevX: lastPoint.x,
+        prevY: lastPoint.y,
+        color,
+        strokeWidth,
+        tool
+      });
+      
+      setLastPoint({ x, y });
     }
   };
 
   const stopDrawing = () => {
     setIsDrawing(false);
+    setLastPoint(null);
   };
 
   const clearCanvas = () => {
@@ -78,6 +135,11 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Send clear command to other users
+    socketClient.sendDrawingUpdate({
+      type: 'clear'
+    });
   };
 
   const colors = ['#000000', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500'];

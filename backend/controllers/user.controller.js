@@ -10,9 +10,14 @@ const signup = async (req, res) => {
             throw new ApiError(400, "All fields are required");
         }
 
-        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
-        if (existingUser) {
-            throw new ApiError(409, "User already exists");
+        const existingUserByEmail = await User.findOne({ email });
+        if (existingUserByEmail) {
+            throw new ApiError(409, `User with email '${email}' already exists. Please choose a different email.`);
+        }
+
+        const existingUserByUsername = await User.findOne({ username });
+        if (existingUserByUsername) {
+            throw new ApiError(409, `User with username '${username}' already exists. Please choose a different username.`);
         }
 
         const user = await User.create({ username, email, password });
