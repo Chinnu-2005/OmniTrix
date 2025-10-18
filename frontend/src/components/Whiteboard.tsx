@@ -447,6 +447,9 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
             const apiUrl = import.meta.env.VITE_GEMINI_API_URL;
             const apiToken = import.meta.env.VITE_GEMINI_API_TOKEN || 'demo-token';
             
+            console.log('API URL:', apiUrl);
+            console.log('API Token:', apiToken);
+            
             const response = await fetch(`${apiUrl}/ai/upload-image`, {
               method: 'POST',
               headers: {
@@ -456,15 +459,28 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
             });
 
             console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
             
             if (response.ok) {
               const result = await response.json();
               console.log('API Response:', result);
-              setSummary(result.summary || result.message || JSON.stringify(result));
+              
+              if (result.summary) {
+                setSummary(result.summary);
+                setShowSummaryModal(true);
+                setIsLoading(false);
+                return;
+              } else {
+                console.log('No summary in response:', result);
+                throw new Error('No summary in response');
+              }
             } else {
-              throw new Error(`HTTP ${response.status}`);
+              const errorText = await response.text();
+              console.log('Error response:', errorText);
+              throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
           } catch (apiError) {
+            console.log('API Error:', apiError);
             console.log('API server not available, showing demo summary');
             setSummary('🤖 AI Summary Demo\n\nThis whiteboard contains:\n• Drawing elements and shapes\n• Text annotations\n• Collaborative content\n\nNote: To get real AI summaries, please start the Gemini API server on port 5000.');
           }
