@@ -78,7 +78,7 @@ def upload_and_process_image():
                 "data": image_bytes
             }
 
-            model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+            model = genai.GenerativeModel(model_name="gemini-1.5-pro")
             response = model.generate_content([sample_file, "Analyze this whiteboard image and provide a summary of what's drawn or written on it. Be descriptive about shapes, text, and any content you can identify."])
             
             summary = response.text
