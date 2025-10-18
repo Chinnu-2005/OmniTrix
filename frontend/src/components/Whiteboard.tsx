@@ -444,8 +444,8 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
 
           console.log('Sending request to AI API...');
           try {
-            const apiUrl = import.meta.env.VITE_GEMINI_API_URL;
-            const apiToken = import.meta.env.VITE_GEMINI_API_TOKEN || 'demo-token';
+            const apiUrl = import.meta.env.VITE_GEMINI_API_URL || 'https://omnitrix-ai.onrender.com';
+            const apiToken = import.meta.env.VITE_GEMINI_API_TOKEN || 'Bearer mysecret123';
             
             console.log('API URL:', apiUrl);
             console.log('API Token:', apiToken);
@@ -462,17 +462,30 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
             console.log('Response ok:', response.ok);
             
             if (response.ok) {
-              const result = await response.json();
-              console.log('API Response:', result);
+              const responseText = await response.text();
+              console.log('Raw response:', responseText);
               
-              if (result.summary) {
-                setSummary(result.summary);
-                setShowSummaryModal(true);
-                setIsLoading(false);
-                return;
+              if (responseText) {
+                try {
+                  const result = JSON.parse(responseText);
+                  console.log('Parsed API Response:', result);
+                  
+                  if (result.summary) {
+                    setSummary(result.summary);
+                    setShowSummaryModal(true);
+                    setIsLoading(false);
+                    return;
+                  } else {
+                    console.log('No summary in response:', result);
+                    throw new Error('No summary in response');
+                  }
+                } catch (parseError) {
+                  console.log('JSON parse error:', parseError);
+                  console.log('Response was:', responseText);
+                  throw new Error('Invalid JSON response');
+                }
               } else {
-                console.log('No summary in response:', result);
-                throw new Error('No summary in response');
+                throw new Error('Empty response');
               }
             } else {
               const errorText = await response.text();
