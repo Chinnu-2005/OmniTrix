@@ -444,7 +444,7 @@ export const Whiteboard = ({ roomId }: WhiteboardProps) => {
 
           console.log('Sending request to AI API...');
           try {
-            const apiUrl = import.meta.env.VITE_GEMINI_API_URL || 'http://127.0.0.1:5000';
+            const apiUrl = import.meta.env.VITE_GEMINI_API_URL;
             const apiToken = import.meta.env.VITE_GEMINI_API_TOKEN || 'demo-token';
             
             const response = await fetch(`${apiUrl}/ai/upload-image`, {
