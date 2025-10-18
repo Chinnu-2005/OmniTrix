@@ -50,6 +50,15 @@ def test_root():
 def health_root():
     return jsonify({"status": "healthy", "service": "AI Summary Service"})
 
+@app.route('/ai/models', methods=['GET'])
+def list_models():
+    try:
+        models = genai.list_models()
+        model_names = [model.name for model in models]
+        return jsonify({"models": model_names})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/ai/upload-image', methods=['POST'])
 def upload_and_process_image():
     token = request.headers.get('Authorization')
@@ -78,12 +87,23 @@ def upload_and_process_image():
                 "data": image_bytes
             }
 
-            model = genai.GenerativeModel(model_name="gemini-pro-vision")
-            response = model.generate_content([sample_file, "Analyze this whiteboard image and provide a summary of what's drawn or written on it. Be descriptive about shapes, text, and any content you can identify."])
+            # Try different model names
+            model_names = ["gemini-pro-vision", "gemini-pro", "models/gemini-pro-vision", "models/gemini-pro"]
             
-            summary = response.text
-            cleaned_summary = clean_text(summary)
-            return jsonify({"summary": cleaned_summary})
+            for model_name in model_names:
+                try:
+                    model = genai.GenerativeModel(model_name=model_name)
+                    response = model.generate_content([sample_file, "Analyze this whiteboard image and provide a summary of what's drawn or written on it. Be descriptive about shapes, text, and any content you can identify."])
+                    
+                    summary = response.text
+                    cleaned_summary = clean_text(summary)
+                    return jsonify({"summary": cleaned_summary, "model_used": model_name})
+                except Exception as model_error:
+                    app.logger.warning(f"Model {model_name} failed: {model_error}")
+                    continue
+            
+            # If all models fail, return error
+            return jsonify({"error": "No available models for image analysis"}), 500
             
         except Exception as e:
             app.logger.error(f"Error processing image: {e}")
