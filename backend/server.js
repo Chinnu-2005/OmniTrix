@@ -12,8 +12,14 @@ const io = new Server(server, {
         credentials: true,
         methods: ['GET', 'POST']
     },
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    maxHttpBufferSize: 1e8
 });
+
+// Enable binary support
+io.engine.generateId = (req) => {
+    return require('crypto').randomBytes(16).toString('hex');
+};
 
 handleConnection(io);
 

@@ -6,6 +6,8 @@ import { apiClient, Room, User } from '../lib/api';
 import { socketClient } from '../lib/socket';
 import { Whiteboard } from './Whiteboard';
 import { Chat } from './Chat';
+import { VoiceChat } from './VoiceChat';
+import { ParticipantsSidebar } from './ParticipantsSidebar';
 
 type RoomInterfaceProps = {
   roomId: string;
@@ -23,6 +25,7 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
   const [newMessage, setNewMessage] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -317,6 +320,17 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
               </div>
               
               <button
+                onClick={() => setShowParticipants(!showParticipants)}
+                className={`p-2 rounded-lg transition-colors duration-200 ${
+                  showParticipants 
+                    ? 'bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400' 
+                    : 'text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-green-600 dark:hover:text-green-400'
+                }`}
+                title="Toggle Participants"
+              >
+                <Users className="w-5 h-5" />
+              </button>
+              <button
                 onClick={() => setShowChat(!showChat)}
                 className={`p-2 rounded-lg transition-colors duration-200 ${
                   showChat 
@@ -427,9 +441,17 @@ export const RoomInterface = ({ roomId, onLeave }: RoomInterfaceProps) => {
           )}
         </main>
         
+        {/* Voice Chat Controls */}
+        <VoiceChat roomId={roomId} participants={participants} />
+        
+        {/* Participants Sidebar */}
+        {showParticipants && (
+          <ParticipantsSidebar participants={participants} roomId={roomId} />
+        )}
+        
         {/* Chat Sidebar */}
         {showChat && (
-          <aside className="w-80 bg-white border-l border-gray-200 flex flex-col shadow-lg">
+          <aside className="w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col shadow-lg">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="font-semibold text-gray-800">Chat</h3>
               <button

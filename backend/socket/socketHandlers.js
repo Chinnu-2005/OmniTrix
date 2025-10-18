@@ -127,41 +127,36 @@ const handleConnection = (io) => {
             }
         });
 
-        // --- Voice Toggle (UI-level, not live audio) ---
+        // --- Voice Chat Events ---
         socket.on('voice-toggle', (data) => {
             if (!socket.roomCode) return;
-            
+            console.log(`🎤 ${socket.user.username} voice ${data.isActive ? 'ON' : 'OFF'}`);
             socket.to(socket.roomCode).emit('voice-toggle', {
                 userId: socket.userId,
                 username: socket.user.username,
-                isEnabled: data.isEnabled
+                isActive: data.isActive
             });
         });
 
-        // --- WebRTC Voice Chat Signaling ---
-        socket.on("webrtc-offer", (data) => {
+        socket.on('voice-chunk', (data) => {
             if (!socket.roomCode) return;
-            console.log(`WebRTC Offer from ${socket.user.username} in room ${socket.roomCode}`);
-            socket.to(socket.roomCode).emit("webrtc-offer", {
-                userId: socket.userId,
-                offer: data.offer,
+            console.log(`🎵 Audio chunk from ${socket.user.username}, size: ${data.chunk?.byteLength || 0}`);
+            // Broadcast binary audio chunk to all other users in the room (no echo)
+            socket.to(socket.roomCode).emit('voice-chunk', {
+                from: socket.userId,
+                username: socket.user.username,
+                chunk: data.chunk
             });
         });
 
-        socket.on("webrtc-answer", (data) => {
+        socket.on('voice-data', (data) => {
             if (!socket.roomCode) return;
-            console.log(`WebRTC Answer from ${socket.user.username} in room ${socket.roomCode}`);
-            socket.to(socket.roomCode).emit("webrtc-answer", {
+            console.log(`🎵 Audio from ${socket.user.username}, blob size: ${data.audioBlob?.length || 0}`);
+            // Broadcast audio data to all other users in the room
+            socket.to(socket.roomCode).emit('voice-data', {
                 userId: socket.userId,
-                answer: data.answer,
-            });
-        });
-
-        socket.on("webrtc-ice-candidate", (data) => {
-            if (!socket.roomCode) return;
-            socket.to(socket.roomCode).emit("webrtc-ice-candidate", {
-                userId: socket.userId,
-                candidate: data.candidate,
+                username: socket.user.username,
+                audioBlob: data.audioBlob
             });
         });
 
