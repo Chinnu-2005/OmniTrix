@@ -5,12 +5,20 @@ from dotenv import load_dotenv
 import os
 import logging
 import io
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app, origins="*", methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -54,13 +62,22 @@ def health_root():
 def list_models():
     try:
         models = genai.list_models()
-        model_names = [model.name for model in models]
-        return jsonify({"models": model_names})
+        vision_models = []
+        for model in models:
+            if 'generateContent' in model.supported_generation_methods:
+                vision_models.append({
+                    'name': model.name,
+                    'display_name': model.display_name,
+                    'methods': model.supported_generation_methods
+                })
+        return jsonify({"vision_models": vision_models})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/ai/upload-image', methods=['POST'])
+@app.route('/ai/upload-image', methods=['POST', 'OPTIONS'])
 def upload_and_process_image():
+    if request.method == 'OPTIONS':
+        return '', 200
     token = request.headers.get('Authorization')
     if token != f"Bearer {SECRET_TOKEN}":
         return jsonify({"error": "Unauthorized"}), 403
@@ -73,12 +90,48 @@ def upload_and_process_image():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
-    # For now, return a working AI-style response to prove integration works
-    # TODO: Fix Gemini API model issues
-    return jsonify({
-        "summary": "🤖 AI Analysis (Python Microservice)\n\nThis whiteboard contains:\n• A green rectangular shape\n• An orange circular element\n• Various drawing strokes and marks\n• Collaborative whiteboard content\n\nNote: This response is from the Python AI microservice. The Gemini API integration is working but needs model configuration fixes."
-    })
+    try:
+        # Read the image file
+        image_data = file.read()
+        
+        # Create a PIL Image from the uploaded file
+        from PIL import Image
+        image = Image.open(io.BytesIO(image_data))
+        
+        # Use available Gemini models that support vision
+        model_names = [
+            'gemini-2.5-flash',
+            'gemini-2.0-flash', 
+            'gemini-flash-latest',
+            'gemini-2.5-pro'
+        ]
+        model = None
+        
+        for model_name in model_names:
+            try:
+                model = genai.GenerativeModel(model_name)
+                logging.info(f"Successfully initialized model: {model_name}")
+                break
+            except Exception as e:
+                logging.warning(f"Model {model_name} not available: {e}")
+                continue
+        
+        if not model:
+            raise Exception("No suitable Gemini model available for vision tasks")
+        
+        # Generate content with the image
+        prompt = "Provide a brief summary of this whiteboard in 2-3 sentences. Focus on the main elements: shapes, text, drawings, and colors."
+        response = model.generate_content([image, prompt])
+        
+        # Clean and format the response
+        summary = clean_text(response.text)
+        
+        return jsonify({"summary": summary})
+        
+    except Exception as e:
+        logging.error(f"Error processing image: {str(e)}")
+        return jsonify({"error": f"Failed to process image: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 5001))
+    app.run(host="0.0.0.0", port=port, debug=True)

@@ -33,6 +33,4 @@ app.use('/api/v1/chat', require('./routes/chat.routes'));
 
 
 
-
-
 module.exports=app
